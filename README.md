@@ -2,7 +2,7 @@
 
 A collection of end-to-end IoT, smart home automation, and embedded robotics projects built with the **ESP32 microcontroller**, sensors, actuators, WebSocket real-time relays, and modern web dashboards.
 
-> *Disclaimer: Developed with the assistance of Antigravity AI IDE.*
+> *Disclaimer: Developed with the assistance of AI.*
 
 ---
 
