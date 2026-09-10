@@ -216,7 +216,57 @@ Phase 2 includes an **Interactive Serial Console**:
 
 ---
 
-## 8. Development Roadmap & Testing Matrix
+## 8. Phase 3: ESP32 ↔ Backend Realtime Wi-Fi Communication
+
+In **Phase 3**, the ESP32 transforms from an isolated hardware circuit into a connected IoT access device communicating with our Node.js/Express backend.
+
+### 1. Start the Backend Server
+The backend is located in `/backend`.
+```bash
+cd backend
+npm install
+npm run dev
+```
+The server will boot on port `5000`:
+- **Local Address**: `http://localhost:5000`
+- **Network IP**: `http://192.168.1.6:5000` (Your machine's Wi-Fi IP address)
+
+### 2. Configure ESP32 Wi-Fi & Server URL
+Open [`esp32/phase3_backend_connect/phase3_backend_connect.ino`](file:///c:/Users/Sarvesh%20Pillai/Desktop/git/ESP32/DoorSystem/esp32/phase3_backend_connect/phase3_backend_connect.ino).
+Edit lines 27–32 with your Wi-Fi details:
+```cpp
+const char* WIFI_SSID     = "Your_WiFi_Name";
+const char* WIFI_PASSWORD = "Your_WiFi_Password";
+const char* BACKEND_URL   = "http://192.168.1.6:5000"; // Computer's local IP
+```
+
+### 3. Flash Firmware & Observe
+1. Upload the sketch to your ESP32.
+2. Open the Serial Monitor at **115200 baud**.
+3. Watch the connection sequence:
+   - ESP32 connects to Wi-Fi.
+   - Registers with the backend via `POST /api/device/register`.
+   - On the backend console, you will see:
+     ```text
+     [ESP32 CONNECTED] Device 'door-001' registered from IP: 192.168.1.X
+     ```
+4. **Trigger Motion**:
+   - Wave hand across the PIR sensor.
+   - ESP32 sends `POST /api/device/event`.
+   - The backend immediately logs:
+     ```text
+     🚨 [MOTION ALERT] Event #1 received from door-001!
+     ```
+5. **Send Remote Unlock Command from Terminal**:
+   In a terminal, send an unlock command:
+   ```powershell
+   Invoke-RestMethod -Uri "http://localhost:5000/api/device/command" -Method Post -Headers @{"Content-Type"="application/json"} -Body '{"command":"UNLOCK"}'
+   ```
+   The ESP32 will receive the command, unlock the latch, turn on the Green LED, and automatically relock 5 seconds later!
+
+---
+
+## 9. Development Roadmap & Testing Matrix
 
 | Test | Objective | Target Phase | Status |
 | :--- | :--- | :--- | :--- |
