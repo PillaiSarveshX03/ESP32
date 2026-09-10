@@ -22,6 +22,8 @@
 #include <ArduinoJson.h>
 #include <DHT.h>
 #include <ESP32Servo.h>
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
 
 // ======================== WiFi & Server Configuration ========================
 const char* WIFI_SSID     = "Airtel_praf_7435";
@@ -42,6 +44,7 @@ const char* WS_SERVER_PATH = "/ws/esp32";
 DHT dht(DHTPIN, DHTTYPE);
 Servo ventServo;
 WebSocketsClient webSocket;
+volatile bool pendingTelemetry = false;
 
 // System States
 enum ControlMode {
@@ -156,13 +159,12 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
       break;
     case WStype_CONNECTED:
       Serial.printf("[WS] Connected to url: %s\n", payload);
-      // Immediately send handshake/telemetry
-      sendTelemetry();
+      pendingTelemetry = true;
       break;
     case WStype_TEXT: {
-      Serial.printf("[WS] Received text: %s\n", payload);
-      StaticJsonDocument<256> doc;
-      DeserializationError error = deserializeJson(doc, payload);
+      Serial.printf("[WS] Received text (%d bytes): %.*s\n", length, (int)length, payload);
+      StaticJsonDocument<384> doc;
+      DeserializationError error = deserializeJson(doc, payload, length);
       if (error) {
         Serial.print("[WS] JSON Deserialization failed: ");
         Serial.println(error.f_str());
@@ -173,14 +175,16 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
       if (action == nullptr) return;
 
       if (strcmp(action, "set_mode") == 0) {
-        const char* modeStr = doc["mode"];
-        if (strcmp(modeStr, "AUTO") == 0) {
-          currentMode = MODE_AUTO;
-          Serial.println("[CTRL] Mode switched to AUTO");
-          evaluateAutoClimateLogic();
-        } else if (strcmp(modeStr, "MANUAL") == 0) {
-          currentMode = MODE_MANUAL;
-          Serial.println("[CTRL] Mode switched to MANUAL");
+        if (doc.containsKey("mode")) {
+          const char* modeStr = doc["mode"];
+          if (modeStr && strcmp(modeStr, "AUTO") == 0) {
+            currentMode = MODE_AUTO;
+            Serial.println("[CTRL] Mode switched to AUTO");
+            evaluateAutoClimateLogic();
+          } else if (modeStr && strcmp(modeStr, "MANUAL") == 0) {
+            currentMode = MODE_MANUAL;
+            Serial.println("[CTRL] Mode switched to MANUAL");
+          }
         }
       } else if (strcmp(action, "set_servo") == 0) {
         if (currentMode == MODE_MANUAL) {
@@ -202,8 +206,8 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
         Serial.printf("[CTRL] Eco angle updated to %d deg\n", ecoAngle);
       }
 
-      // Broadcast new state after command
-      sendTelemetry();
+      // Flag telemetry to send safely from loop() instead of inside callback
+      pendingTelemetry = true;
       break;
     }
     case WStype_BIN:
@@ -219,6 +223,9 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 
 // ========================== Setup & Loop =====================================
 void setup() {
+  // Disable brownout detector to prevent false reboots when servo or Wi-Fi draws current
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
   Serial.begin(115200);
   delay(500);
   Serial.println("\n==========================================");
@@ -231,8 +238,7 @@ void setup() {
   // Initialize DHT11
   dht.begin();
 
-  // Initialize Servo
-  ESP32PWM::allocateTimer(0);
+  // Initialize Servo (Reserve Timer 0 for ESP32 RTOS/Wi-Fi to prevent crashes)
   ESP32PWM::allocateTimer(1);
   ESP32PWM::allocateTimer(2);
   ESP32PWM::allocateTimer(3);
@@ -243,6 +249,8 @@ void setup() {
   // Connect to WiFi
   Serial.printf("Connecting to Wi-Fi: %s", WIFI_SSID);
   WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.persistent(true);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 30) {
@@ -259,19 +267,34 @@ void setup() {
     // Connect WebSocket Client
     webSocket.begin(WS_SERVER_HOST, WS_SERVER_PORT, WS_SERVER_PATH);
     webSocket.onEvent(webSocketEvent);
-    webSocket.setReconnectInterval(3000);
+    webSocket.setReconnectInterval(2000);
   } else {
     Serial.println("\n[WiFi] Connection timed out. Running in standalone fallback mode!");
   }
 }
 
-void loop() {
-  // Service WebSocket
-  if (WiFi.status() == WL_CONNECTED) {
-    webSocket.loop();
-  }
+unsigned long lastWifiCheck = 0;
 
+void loop() {
   unsigned long now = millis();
+
+  // WiFi Reconnection Management
+  if (WiFi.status() != WL_CONNECTED) {
+    if (now - lastWifiCheck >= 5000) {
+      lastWifiCheck = now;
+      Serial.println("[WiFi] Lost connection, reconnecting...");
+      WiFi.reconnect();
+    }
+  } else {
+    // Service WebSocket
+    webSocket.loop();
+
+    // Send telemetry if pending (dispatched safely outside callback)
+    if (pendingTelemetry) {
+      pendingTelemetry = false;
+      sendTelemetry();
+    }
+  }
 
   // Read PIR Sensor
   bool pirState = (digitalRead(PIRPIN) == HIGH);

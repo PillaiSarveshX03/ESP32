@@ -56,6 +56,19 @@ smart-hvac-system/
 
 ## ⚡ Quick Start Guide
 
+### 🚀 1-Click Launch (Windows)
+Double-click [`start-system.bat`](file:///c:/Users/Sarvesh%20Pillai/Desktop/git/ESP32/smart-hvac-system/start-system.bat) in the root folder. It will:
+1. Verify dependencies and run `npm install` if required.
+2. Launch the Node.js backend hub on port 5000.
+3. Launch the Vite React dashboard on port 3000.
+4. Open `http://localhost:3000` automatically in your browser.
+
+To stop both services at any time, run [`stop-system.bat`](file:///c:/Users/Sarvesh%20Pillai/Desktop/git/ESP32/smart-hvac-system/stop-system.bat).
+
+---
+
+### Manual Launch
+
 ### Step 1: Start the Backend Hub
 ```bash
 cd smart-hvac-system/server
