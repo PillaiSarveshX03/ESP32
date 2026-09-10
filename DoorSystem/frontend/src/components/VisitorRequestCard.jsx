@@ -24,7 +24,7 @@ export default function VisitorRequestCard({ visitor, onResolved }) {
   };
 
   // Safe fallback photo SVG if image fails or before camera is connected
-  const defaultPhoto = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80";
+  const defaultPhoto = "https://unsplash.com/photos/blue-porch-with-wicker-furniture-XcVm8mn7NUM";
 
   return (
     <div className="visitor-alert-card">

@@ -645,3 +645,409 @@ body {
   color: #ffffff;
   border-color: rgba(6, 182, 212, 0.4);
 }
+
+/* ==========================================================================
+   SERVO ANGLE CONTROLLER & CALIBRATION
+   ========================================================================== */
+.servo-control-card {
+  background: var(--bg-surface);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 1.75rem;
+  box-shadow: var(--shadow-md);
+  transition: border-color var(--duration-normal);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.servo-control-card:hover {
+  border-color: rgba(6, 182, 212, 0.35);
+}
+
+.servo-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.servo-header-left {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.servo-icon-wrapper {
+  background: rgba(6, 182, 212, 0.12);
+  border: 1px solid rgba(6, 182, 212, 0.25);
+  padding: 0.75rem;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-cyber);
+}
+
+.servo-badge {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-cyber);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.servo-title {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--color-text-main);
+  letter-spacing: -0.01em;
+}
+
+.servo-subtitle {
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+  margin-top: 0.2rem;
+}
+
+.servo-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-subtle);
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.servo-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.servo-status-dot.online {
+  background: #10b981;
+  box-shadow: 0 0 10px #10b981;
+}
+
+.servo-status-dot.offline {
+  background: #ef4444;
+}
+
+.servo-body-grid {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 2rem;
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .servo-body-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+}
+
+/* Visual Dial Gauge */
+.servo-visual-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 1.25rem;
+  position: relative;
+}
+
+.servo-dial-box {
+  width: 200px;
+  height: 120px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.servo-dial-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.servo-active-arc {
+  transition: stroke-dashoffset 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.servo-needle-arm {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  width: 4px;
+  height: 70px;
+  transform-origin: bottom center;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.servo-needle-tip {
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(to top, #3b82f6, #06b6d4, #ffffff);
+  border-radius: 3px;
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.8);
+}
+
+.servo-angle-readout {
+  position: absolute;
+  bottom: 0px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.servo-angle-number {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1;
+  text-shadow: 0 0 16px rgba(6, 182, 212, 0.5);
+}
+
+.servo-angle-state-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--color-cyber);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+}
+
+.servo-dial-legend {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--color-text-dim);
+  margin-top: 0.5rem;
+  padding: 0 0.5rem;
+}
+
+/* Interactive Controls */
+.servo-interactive-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.servo-section-label {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.servo-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.65rem;
+}
+
+.servo-preset-btn {
+  background: rgba(30, 41, 69, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 0.65rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.servo-preset-btn:hover {
+  background: rgba(6, 182, 212, 0.15);
+  border-color: rgba(6, 182, 212, 0.4);
+  transform: translateY(-2px);
+}
+
+.servo-preset-btn.active {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.25) 0%, rgba(59, 130, 246, 0.25) 100%);
+  border-color: var(--color-cyber);
+  box-shadow: 0 0 15px rgba(6, 182, 212, 0.25);
+}
+
+.preset-btn-angle {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text-main);
+}
+
+.preset-btn-name {
+  font-size: 0.7rem;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+
+.servo-slider-container {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.servo-slider-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.servo-slider-val-badge {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-cyber);
+  background: rgba(6, 182, 212, 0.12);
+  border: 1px solid rgba(6, 182, 212, 0.25);
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+}
+
+.servo-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.servo-step-btn {
+  background: rgba(30, 41, 69, 0.8);
+  border: 1px solid var(--border-subtle);
+  color: var(--color-text-main);
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+  flex-shrink: 0;
+}
+
+.servo-step-btn:hover:not(:disabled) {
+  background: var(--color-cyber);
+  color: #090d16;
+  border-color: var(--color-cyber);
+}
+
+.servo-step-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.servo-range-input {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  border-radius: 5px;
+  background: linear-gradient(to right, #3b82f6, #06b6d4, #10b981);
+  outline: none;
+  cursor: pointer;
+}
+
+.servo-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 3px solid #06b6d4;
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.8);
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.servo-range-input::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.servo-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.btn-apply-servo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+  color: #ffffff;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0.75rem 1.6rem;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: var(--shadow-glow-cyan);
+  transition: all var(--duration-normal) var(--ease-spring);
+}
+
+.btn-apply-servo:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 0 30px rgba(6, 182, 212, 0.45);
+}
+
+.btn-apply-servo:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.btn-apply-servo.success {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  box-shadow: var(--shadow-glow-emerald);
+}
+
+.servo-help-note {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--color-text-dim);
+}
+
+.text-cyber {
+  color: var(--color-cyber);
+}
+

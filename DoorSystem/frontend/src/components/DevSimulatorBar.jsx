@@ -41,6 +41,10 @@ export default function DevSimulatorBar({ onSimulateVisitor }) {
     await sendDoorCommand('LOCK', 'Simulated Owner Denial');
   };
 
+  const handleSimulateCustomAngle = async (angle) => {
+    await sendDoorCommand('SET_ANGLE', `Simulated Angle Test (${angle}°)`, angle);
+  };
+
   return (
     <div className="simulator-panel">
       <div className="sim-tag">
@@ -65,11 +69,11 @@ export default function DevSimulatorBar({ onSimulateVisitor }) {
         </button>
 
         <button className="btn-sim" onClick={handleSimulateUnlock}>
-          Simulate Allow
+          Simulate Allow (90°)
         </button>
 
         <button className="btn-sim" onClick={handleSimulateLock}>
-          Simulate Deny
+          Simulate Deny (0°)
         </button>
       </div>
     </div>

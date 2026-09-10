@@ -53,11 +53,11 @@ const char *DEVICE_ID = "door-001";
 // Set to FALSE: Operates as a precise positional servo (moves to exact angles)
 const bool IS_CONTINUOUS_360_SERVO = false;
 
-// Configured for 180° -> 270° sweep as requested:
-const int LOCKED_POSITION = 0;           // Starting / Locked position (degrees)
-const int UNLOCKED_POSITION = 90;        // Unlocked position (degrees)
-const int SERVO_MAX_PHYSICAL_RANGE = 90; // Physical limit scale
-const int SERVO_STEP_DELAY = 25;         // Speed: ms per degree (smooth glide)
+// Standard SG90 Physical Range (0° to 180°) - Direction is preserved (0° = Locked, Increasing = Unlocked sweep)
+const int LOCKED_POSITION = 0;           // Starting / Locked position (0 degrees)
+int UNLOCKED_POSITION = 90;              // Default Unlocked position (90 degrees)
+const int SERVO_MAX_PHYSICAL_RANGE = 180; // Full Physical scale (0° - 180°)
+const int SERVO_STEP_DELAY = 20;         // Speed: ms per degree (smooth glide)
 
 // ==========================================
 // 4. TIMING & ELECTRICAL SAFETY
@@ -137,13 +137,13 @@ void writeServoPulse(int angleDegrees) {
   doorServo.writeMicroseconds(pulseUs);
 }
 
-void setDoorLatch(bool unlock) {
+void setServoAngle(int targetAngle) {
+  targetAngle = constrain(targetAngle, 0, SERVO_MAX_PHYSICAL_RANGE);
+
   if (!doorServo.attached()) {
     doorServo.attach(SERVO_PIN, 500, 2500);
     delay(30);
   }
-
-  int targetAngle = unlock ? UNLOCKED_POSITION : LOCKED_POSITION;
 
   // Guard: If servo is ALREADY at target angle, do not move!
   if (currentServoAngle == targetAngle) {
@@ -154,7 +154,7 @@ void setDoorLatch(bool unlock) {
   Serial.print(currentServoAngle);
   Serial.print(F("° to "));
   Serial.print(targetAngle);
-  Serial.println(F("°..."));
+  Serial.println(F("° (Maintaining directional polarity)..."));
 
   if (currentServoAngle < targetAngle) {
     for (int pos = currentServoAngle; pos <= targetAngle; pos++) {
@@ -169,9 +169,14 @@ void setDoorLatch(bool unlock) {
   }
 
   currentServoAngle = targetAngle;
-  Serial.print(F("[SERVO] Position locked at "));
+  Serial.print(F("[SERVO] Position set to "));
   Serial.print(currentServoAngle);
   Serial.println(F("°."));
+}
+
+void setDoorLatch(bool unlock) {
+  int targetAngle = unlock ? UNLOCKED_POSITION : LOCKED_POSITION;
+  setServoAngle(targetAngle);
 }
 
 void updateIndicators() {
@@ -326,7 +331,7 @@ void reportDoorStateToBackend(const char* newStateStr) {
 }
 
 /**
- * Poll server for any owner commands (UNLOCK or LOCK).
+ * Poll server for any owner commands (UNLOCK, LOCK, or SET_ANGLE).
  */
 void pollServerCommands() {
   if (WiFi.status() != WL_CONNECTED)
@@ -341,8 +346,24 @@ void pollServerCommands() {
   int httpCode = http.GET();
   if (httpCode == 200) {
     String response = http.getString();
-    // Simple fast substring search (avoids heavy JSON library requirements)
-    if (response.indexOf("\"command\":\"UNLOCK\"") > 0) {
+    
+    // Check for SET_ANGLE or specific angle payload
+    if (response.indexOf("\"command\":\"SET_ANGLE\"") > 0 || response.indexOf("\"angle\":") > 0) {
+      int idx = response.indexOf("\"angle\":");
+      if (idx > 0) {
+        int val = response.substring(idx + 8).toInt();
+        val = constrain(val, 0, SERVO_MAX_PHYSICAL_RANGE);
+        Serial.print(F("\n📐 [REMOTE COMMAND] Received 'SET_ANGLE' from Backend: "));
+        Serial.print(val);
+        Serial.println(F("°"));
+        setServoAngle(val);
+        if (val == LOCKED_POSITION) {
+          transitionTo(STATE_IDLE_LOCKED);
+        } else {
+          transitionTo(STATE_DOOR_UNLOCKED);
+        }
+      }
+    } else if (response.indexOf("\"command\":\"UNLOCK\"") > 0) {
       Serial.println(F("\n🔑 [REMOTE COMMAND] Received 'UNLOCK' from Backend!"));
       transitionTo(STATE_DOOR_UNLOCKED);
     } else if (response.indexOf("\"command\":\"LOCK\"") > 0) {
@@ -363,19 +384,77 @@ void handleDirectCommand() {
   }
 
   String body = localServer.arg("plain");
+
+  // Check for angle setting via JSON or parameters
+  if (body.indexOf("SET_ANGLE") >= 0 || body.indexOf("\"angle\":") >= 0 || localServer.hasArg("angle")) {
+    int targetAngle = -1;
+    if (localServer.hasArg("angle")) {
+      targetAngle = localServer.arg("angle").toInt();
+    } else {
+      int idx = body.indexOf("\"angle\":");
+      if (idx >= 0) {
+        targetAngle = body.substring(idx + 8).toInt();
+      }
+    }
+
+    if (targetAngle >= 0 && targetAngle <= SERVO_MAX_PHYSICAL_RANGE) {
+      Serial.print(F("\n📐 [DIRECT PUSH] Received 'SET_ANGLE' command: "));
+      Serial.print(targetAngle);
+      Serial.println(F("°"));
+
+      setServoAngle(targetAngle);
+      if (targetAngle == LOCKED_POSITION) {
+        transitionTo(STATE_IDLE_LOCKED);
+      } else {
+        transitionTo(STATE_DOOR_UNLOCKED);
+      }
+
+      localServer.send(200, "application/json",
+                       "{\"success\":true,\"angle\":" + String(targetAngle) +
+                       ",\"state\":\"" + (targetAngle == LOCKED_POSITION ? "LOCKED" : "UNLOCKED") + "\"}");
+      return;
+    }
+  }
+
   if (body.indexOf("UNLOCK") >= 0) {
     Serial.println(F("\n🔑 [DIRECT PUSH] Received 'UNLOCK' command!"));
     localServer.send(200, "application/json",
-                     "{\"success\":true,\"state\":\"UNLOCKED\"}");
+                     "{\"success\":true,\"state\":\"UNLOCKED\",\"angle\":" + String(UNLOCKED_POSITION) + "}");
     transitionTo(STATE_DOOR_UNLOCKED);
   } else if (body.indexOf("LOCK") >= 0) {
     Serial.println(F("\n🔒 [DIRECT PUSH] Received 'LOCK' command!"));
     localServer.send(200, "application/json",
-                     "{\"success\":true,\"state\":\"LOCKED\"}");
+                     "{\"success\":true,\"state\":\"LOCKED\",\"angle\":" + String(LOCKED_POSITION) + "}");
     transitionTo(STATE_IDLE_LOCKED);
   } else {
     localServer.send(400, "application/json",
                      "{\"error\":\"Unknown command\"}");
+  }
+}
+
+// Standalone Direct /servo route for quick manual or REST angle control
+void handleServoRoute() {
+  if (localServer.hasArg("angle")) {
+    int angle = localServer.arg("angle").toInt();
+    angle = constrain(angle, 0, SERVO_MAX_PHYSICAL_RANGE);
+    Serial.print(F("\n📐 [DIRECT REST /servo] Setting angle: "));
+    Serial.print(angle);
+    Serial.println(F("°"));
+
+    setServoAngle(angle);
+    if (angle == LOCKED_POSITION) {
+      transitionTo(STATE_IDLE_LOCKED);
+    } else {
+      transitionTo(STATE_DOOR_UNLOCKED);
+    }
+    localServer.send(200, "application/json",
+                     "{\"success\":true,\"angle\":" + String(angle) +
+                     ",\"state\":\"" + (angle == LOCKED_POSITION ? "LOCKED" : "UNLOCKED") + "\"}");
+  } else {
+    localServer.send(200, "application/json",
+                     "{\"currentAngle\":" + String(currentServoAngle) +
+                     ",\"lockedPosition\":" + String(LOCKED_POSITION) +
+                     ",\"unlockedPosition\":" + String(UNLOCKED_POSITION) + "}");
   }
 }
 
@@ -486,6 +565,7 @@ void setup() {
 
     // Start local direct command server
     localServer.on("/command", HTTP_POST, handleDirectCommand);
+    localServer.on("/servo", HTTP_ANY, handleServoRoute);
     const char *headerkeys[] = {"x-device-token"};
     localServer.collectHeaders(headerkeys, 1);
     localServer.begin();
