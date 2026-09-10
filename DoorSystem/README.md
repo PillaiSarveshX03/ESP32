@@ -135,9 +135,9 @@ DoorSystem/
 | | Cathode (Short -)| **GND** | Ground | Connect to ground rail. |
 | **Green LED** | Anode (Long +) | **GPIO 26** | Granted / Motion | Driven via safe PWM current limiter. |
 | | Cathode (Short -)| **GND** | Ground | Connect to ground rail. |
-| **Servo Motor** | VCC (Red) | **VIN (5V)** | Motor Power | Do NOT power from 3.3V rail. |
-| *(Phase 2)* | GND (Brown) | **GND** | Ground | Common system ground. |
-| | SIG (Orange) | **GPIO 13** | PWM Control | Standard 50Hz PWM signal. |
+| **Servo Motor** | VCC (Red wire) | **VIN (5V)** | Motor Power | Do NOT connect to 3.3V. Powers from USB 5V. |
+| *(SG90)* | GND (Brown wire)| **GND** | Ground | Common system ground. |
+| | SIG (Orange wire)| **GPIO 13** | PWM Control | Standard 50Hz PWM signal. |
 
 ---
 
@@ -147,58 +147,44 @@ If you connect an LED directly between an ESP32 3.3V pin and GND with **NO resis
 
 Because the ESP32 is rated for **maximum 12 mA recommended per pin**, this can permanently burn out the microcontroller's internal output transistor or destroy your LED.
 
-#### The Safe Prototype Solution implemented in Phase 1:
-The Phase 1 firmware utilizes **Hardware PWM Current Limiting** (`analogWrite` / `ledc`):
+#### The Safe Prototype Solution implemented in Phase 1 & 2:
+The firmware utilizes **Hardware PWM Current Limiting** (`analogWrite` / `ledc`):
 - Instead of keeping the pin continuously `HIGH` (100% duty cycle), it pulses at a safe ~8% duty cycle (`SAFE_LED_DUTY_CYCLE = 22/255`).
 - This restricts average power dissipation while keeping the LED visibly illuminated in typical room lighting.
 - Once you obtain **220Ω to 330Ω resistors**, wire them in series with each LED anode and set `USE_PWM_CURRENT_LIMIT = false` in the firmware.
 
 ---
 
-## 7. Phase 1 Step-by-Step Setup & Verification
+## 7. Phase 2: SG90 Servo Latch Setup & Verification
 
-Follow these steps to run the initial hardware test (**PIR motion detection → ESP32 → LED indication**):
+Phase 2 builds upon Phase 1 by adding the physical door locking actuator: the **SG90 Micro-Servo**.
 
-### Step 1: Install ESP32 in Arduino IDE
-1. Open **Arduino IDE**.
-2. Go to `File` → `Preferences`.
-3. In **Additional Boards Manager URLs**, paste:
-   ```text
-   https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-   ```
-4. Go to `Tools` → `Board` → `Boards Manager...`, search for `esp32` by Espressif Systems, and click **Install**.
+### Required Library: ESP32Servo
+1. In **Arduino IDE**, click `Tools` → `Manage Libraries...` (or press `Ctrl + Shift + I`).
+2. Type **ESP32Servo** in the search bar.
+3. Find the library by **Kevin Harrington / John K. Bennett** and click **Install**.
 
-### Step 2: Wire the Hardware on the Breadboard
-1. Unplug the ESP32 from USB power before wiring.
-2. Insert the ESP32 into the breadboard bridging the center divider.
-3. Wire the **PIR Sensor**:
-   - VCC → ESP32 **VIN**
-   - GND → ESP32 **GND**
-   - OUT → ESP32 **GPIO 27**
-4. Wire the **Red LED**:
-   - Long leg (Anode +) → ESP32 **GPIO 25**
-   - Short leg (Cathode -) → ESP32 **GND**
-5. Wire the **Green LED**:
-   - Long leg (Anode +) → ESP32 **GPIO 26**
-   - Short leg (Cathode -) → ESP32 **GND**
+### Step 1: Wire the SG90 Servo
+Ensure the ESP32 is disconnected from USB power while plugging wires:
+- **Red wire (VCC)** → ESP32 **VIN** (5V power rail from USB).
+- **Brown wire (GND)** → ESP32 **GND** (Common ground rail).
+- **Orange/Yellow wire (Signal)** → ESP32 **GPIO 13**.
 
-> [!TIP]
-> If your PIR is an **HC-SR501**:
-> - Turn the **Time Delay potentiometer** fully counter-clockwise (shortest delay, ~3 seconds).
-> - Turn the **Sensitivity potentiometer** clockwise to medium sensitivity.
-> - Ensure the jumper is set to **'L' (single trigger)** or **'H' (repeat trigger)**. Repeat trigger ('H') works best with our software debounce.
+> [!WARNING]
+> Never connect the SG90 Red wire to the **3V3** pin of the ESP32! The 3.3V voltage regulator cannot deliver the sudden inrush current demanded by the motor and will trigger an immediate brownout reset.
 
-### Step 3: Flash the Firmware
-1. Connect the ESP32 to your computer using a Micro-USB data cable.
-2. Open [`esp32/phase1_pir_led/phase1_pir_led.ino`](file:///c:/Users/Sarvesh%20Pillai/Desktop/git/ESP32/DoorSystem/esp32/phase1_pir_led/phase1_pir_led.ino) in Arduino IDE.
-3. Select `Tools` → `Board` → `ESP32 Arduino` → `ESP32 Dev Module` (or `DOIT ESP32 DEVKIT V1`).
-4. Select `Tools` → `Port` → choose the COM port assigned to your ESP32 (e.g., `COM3`, `COM4`).
-5. Click **Upload** (the right-arrow icon). If the upload stays stuck on *Connecting......*, hold the **BOOT** button on the ESP32 for 2 seconds.
+### Step 2: Flash Phase 2 Firmware
+1. Open [`esp32/phase2_servo/phase2_servo.ino`](file:///c:/Users/Sarvesh%20Pillai/Desktop/git/ESP32/DoorSystem/esp32/phase2_servo/phase2_servo.ino) in Arduino IDE.
+2. Ensure your board is set to **ESP32 Dev Module** and the correct COM port is selected.
+3. Click **Upload**.
+4. Open the **Serial Monitor** at **115200 baud**.
 
-### Step 4: Open Serial Monitor
-1. Open `Tools` → `Serial Monitor`.
-2. Set the baud rate in the bottom right corner to **115200 baud**.
-3. Press the **EN** (or **RST**) button on the ESP32 once to restart cleanly.
+### Step 3: Interactive Testing & Verification
+Phase 2 includes an **Interactive Serial Console**:
+- Type **`o`** (or `u`) and press Enter: Manually triggers **UNLOCK** (Servo smoothly sweeps to 90°, Green LED ON).
+- Type **`d`** (or `l`) and press Enter: Manually triggers **LOCK** (Servo smoothly sweeps to 0°, Red LED ON).
+- Type **`t`** and press Enter: Runs a full **sweep calibration test** (0° → 90° → 180° → 0°).
+- **Trigger Motion**: Wave your hand in front of the PIR. The Green LED will turn on, the servo will unlock to 90°, stay open for 5 seconds, and then automatically secure back to 0° with a 6-second cooldown.
 
 ### Expected Serial Monitor Output:
 ```text
