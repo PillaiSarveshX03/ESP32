@@ -170,14 +170,19 @@ app.post('/api/device/command', (req, res) => {
     return res.status(400).json({ success: false, error: "Invalid command. Use 'UNLOCK' or 'LOCK'." });
   }
 
-  state.pendingCommand = command;
-  state.doorState = command === 'UNLOCK' ? 'UNLOCKED' : 'LOCKED';
+  const targetState = command === 'UNLOCK' ? 'UNLOCKED' : 'LOCKED';
+
+  state.doorState = targetState;
+  state.pendingCommand = command; // Fallback for polling
 
   console.log(`\n🔑 [DOOR COMMAND] Executed '${command}' (Reason: ${reason || 'Manual'})`);
 
-  // If we know the ESP32 IP, attempt immediate direct HTTP push
+  // Direct push to ESP32 IP
   if (state.device.ip) {
-    pushCommandToEsp32(state.device.ip, command);
+    pushCommandToEsp32(state.device.ip, command, () => {
+      // Direct push succeeded -> clear pending command so polling doesn't repeat it!
+      state.pendingCommand = null;
+    });
   }
 
   // Real-time broadcast to dashboard
@@ -201,8 +206,19 @@ app.get('/api/device/status', (req, res) => {
   });
 });
 
+// 7. ESP32 Reports Door State Change (e.g. Relocked after hold duration)
+app.post('/api/device/state', authenticateDevice, (req, res) => {
+  const { doorState } = req.body;
+  if (doorState && ['LOCKED', 'UNLOCKED', 'MOTION_DETECTED'].includes(doorState)) {
+    state.doorState = doorState;
+    console.log(`\n🔄 [STATE SYNC] ESP32 confirmed door state: ${doorState}`);
+    io.emit('door:state', { state: state.doorState, timestamp: new Date().toISOString() });
+  }
+  res.json({ success: true, doorState: state.doorState });
+});
+
 // Direct HTTP push helper to notify ESP32 immediately without waiting for next poll
-function pushCommandToEsp32(ip, command) {
+function pushCommandToEsp32(ip, command, onSuccess) {
   const postData = JSON.stringify({ command });
   const req = http.request({
     hostname: ip,
@@ -214,13 +230,15 @@ function pushCommandToEsp32(ip, command) {
       'Content-Length': Buffer.byteLength(postData),
       'x-device-token': DEVICE_AUTH_TOKEN
     },
-    timeout: 2000
+    timeout: 5000
   }, (res) => {
-    // Response handled
+    if (res.statusCode === 200 && onSuccess) {
+      onSuccess();
+    }
   });
 
   req.on('error', (e) => {
-    // Direct push failure is gracefully handled; ESP32 will pick it up on next poll
+    // Direct push failure is gracefully handled; ESP32 will pick it up on poll
   });
 
   req.write(postData);
